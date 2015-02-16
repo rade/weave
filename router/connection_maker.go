@@ -24,6 +24,7 @@ const (
 type ConnectionMaker struct {
 	ourself        *LocalPeer
 	peers          *Peers
+	AutoAdd        bool // should we attempt to add connections automatically?
 	targets        map[string]*Target
 	cmdLineAddress map[string]bool
 	queryChan      chan<- *ConnectionMakerInteraction
@@ -136,24 +137,26 @@ func (cm *ConnectionMaker) checkStateAndAttemptConnections() time.Duration {
 		addTarget(address)
 	}
 
-	// Add targets for peers that someone else is connected to, but we
-	// aren't
-	cm.peers.ForEach(func(name PeerName, peer *Peer) {
-		for _, conn := range peer.Connections() {
-			otherPeer := conn.Remote().Name
-			if otherPeer == cm.ourself.Name || ourConnectedPeers[otherPeer] {
-				return
+	if cm.AutoAdd {
+		// Add targets for peers that someone else is connected to, but we
+		// aren't
+		cm.peers.ForEach(func(name PeerName, peer *Peer) {
+			for _, conn := range peer.Connections() {
+				otherPeer := conn.Remote().Name
+				if otherPeer == cm.ourself.Name || ourConnectedPeers[otherPeer] {
+					return
+				}
+				address := conn.RemoteTCPAddr()
+				// try both portnumber of connection and standard port.  Don't use remote side of inbound connection.
+				if conn.Outbound() {
+					addTarget(address)
+				}
+				if host, _, err := net.SplitHostPort(address); err == nil {
+					addTarget(NormalisePeerAddr(host))
+				}
 			}
-			address := conn.RemoteTCPAddr()
-			// try both portnumber of connection and standard port.  Don't use remote side of inbound connection.
-			if conn.Outbound() {
-				addTarget(address)
-			}
-			if host, _, err := net.SplitHostPort(address); err == nil {
-				addTarget(NormalisePeerAddr(host))
-			}
-		}
-	})
+		})
+	}
 
 	now := time.Now() // make sure we catch items just added
 	after := MaxDuration

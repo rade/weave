@@ -50,6 +50,7 @@ func main() {
 		bufSz       int
 		allocCIDR   string
 		apiPath     string
+		autoAddC    bool
 	)
 
 	flag.BoolVar(&justVersion, "version", false, "print version and exit")
@@ -65,6 +66,7 @@ func main() {
 	flag.IntVar(&bufSz, "bufsz", 8, "capture buffer size in MB (defaults to 8MB)")
 	flag.StringVar(&allocCIDR, "alloc", "", "CIDR of IP address space to allocate within")
 	flag.StringVar(&apiPath, "api", "unix:///var/run/docker.sock", "Path to Docker API socket")
+	flag.BoolVar(&autoAddC, "autoAddConnections", true, "automatically add connections between peers")
 	flag.Parse()
 	peers = flag.Args()
 
@@ -144,6 +146,7 @@ func main() {
 
 	router := weave.NewRouter(iface, ourName, nickName, pwSlice, connLimit, bufSz*1024*1024, logFrame)
 	log.Println("Our name is", router.Ourself.Name, "("+router.Ourself.NickName+")")
+	router.ConnectionMaker.AutoAdd = autoAddC
 	router.Start()
 	for _, peer := range peers {
 		if addr, err := net.ResolveTCPAddr("tcp4", weave.NormalisePeerAddr(peer)); err == nil {
