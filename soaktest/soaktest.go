@@ -7,6 +7,7 @@ import (
 	"github.com/docker/libcontainer/system"
 	"github.com/fsouza/go-dockerclient"
 	lg "github.com/zettio/weave/common"
+	"github.com/zettio/weave/weaveapi"
 	"net"
 	"os"
 	"runtime"
@@ -26,6 +27,8 @@ func main() {
 type testContext struct {
 	apiPath string
 	dc      *docker.Client
+	conts   []*docker.Container
+	clients []*weaveapi.Client
 }
 
 const namePrefix = "testweave"
@@ -52,9 +55,21 @@ func makeWeaves(n int) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Start the Weave containers
+	context.conts = make([]*docker.Container, n)
+	context.clients = make([]*weaveapi.Client, n)
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("%s%d", namePrefix, i)
-		context.startOneWeave(name)
+		context.conts[i] = context.startOneWeave(name)
+		net := context.conts[i].NetworkSettings
+		context.clients[i] = weaveapi.NewClient(net.IPAddress)
+	}
+
+	// Give the Weaves time to start up
+	time.Sleep(200 * time.Millisecond)
+
+	// Make some connections (note Docker assumed to be running with --icc=true)
+	for i := 0; i < n-1; i++ {
+		check(context.clients[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
 	}
 }
 
@@ -81,7 +96,7 @@ func (context *testContext) startOneWeave(name string) *docker.Container {
 
 	config := &docker.Config{
 		Image: "zettio/weave",
-		Cmd:   []string{"-iface", "ethwe", "-api", "none"},
+		Cmd:   []string{"-iface", "ethwe", "-api", "none", "-autoAddConnections=false"},
 	}
 	opts := docker.CreateContainerOptions{Name: name, Config: config}
 	lg.Info.Println("Creating", name)
