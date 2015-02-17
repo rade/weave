@@ -44,7 +44,11 @@ func NewClient(addr string) *Client {
 }
 
 func (client *Client) Connect(remote string) error {
-	fmt.Println("Connecting", client.baseUrl, "to", remote)
 	_, err := httpGet(client.baseUrl + "/connect?peer=" + remote)
 	return err
+}
+
+func (client *Client) AllocateIPFor(id string) (string, error) {
+	ret, err := httpGet(client.baseUrl + "/ip/" + id)
+	return ret, err
 }

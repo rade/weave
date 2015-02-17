@@ -71,6 +71,14 @@ func makeWeaves(n int) {
 	for i := 0; i < n-1; i++ {
 		check(context.clients[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
 	}
+
+	// Give the connections time to settle
+	time.Sleep(200 * time.Millisecond)
+
+	for i := 0; ; i++ {
+		_, err := context.clients[0].AllocateIPFor("foobar")
+		check(err, "ip allocate")
+	}
 }
 
 // Delete any old containers created by this test prog
@@ -96,7 +104,7 @@ func (context *testContext) startOneWeave(name string) *docker.Container {
 
 	config := &docker.Config{
 		Image: "zettio/weave",
-		Cmd:   []string{"-iface", "ethwe", "-api", "none", "-autoAddConnections=false"},
+		Cmd:   []string{"-iface", "ethwe", "-api", "none", "-autoAddConnections=false", "-alloc", "10.0.0.0/22", "-debug"},
 	}
 	opts := docker.CreateContainerOptions{Name: name, Config: config}
 	lg.Info.Println("Creating", name)
