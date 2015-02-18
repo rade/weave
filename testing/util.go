@@ -120,6 +120,10 @@ func StackTrace() string {
 	return stackTrace(false)
 }
 
+func StackTraceAll() string {
+	return stackTrace(true)
+}
+
 func stackTrace(all bool) string {
 	buf := make([]byte, 1<<20)
 	stacklen := runtime.Stack(buf, all)

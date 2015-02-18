@@ -1,17 +1,13 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"github.com/docker/libcontainer/netlink"
-	"github.com/docker/libcontainer/system"
 	"github.com/fsouza/go-dockerclient"
 	lg "github.com/zettio/weave/common"
+	wt "github.com/zettio/weave/testing"
 	"github.com/zettio/weave/weaveapi"
 	"math/rand"
 	"net"
-	"os"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -22,29 +18,66 @@ type weaver struct {
 }
 
 func main() {
-	{
-		context1 := &testContext{apiPath: "unix:/var/run/docker.sock"}
-		context1.makeWeaves(3)
-		for i := 0; ; i++ {
-			_, err := context1.clients[0].AllocateIPFor("foobar")
-			if err != nil {
-				lg.Info.Printf("Managed to allocate %d addresses\n", i)
-				break
-			}
+	//RunWithTimeout(10*time.Second, TestAllocFromOne)
+	//RunWithTimeout(20*time.Second, TestAllocFromRand)
+	TestCreationAndDestruction()
+}
+
+// Borrowed from net/http tests:
+// goTimeout runs f, failing t if f takes more than d to complete.
+func RunWithTimeout(d time.Duration, f func()) {
+	ch := make(chan bool, 2)
+	timer := time.AfterFunc(d, func() {
+		lg.Error.Printf("Timeout expired after %v: stacks:\n%s", d, wt.StackTraceAll())
+		ch <- true
+	})
+	defer timer.Stop()
+	go func() {
+		defer func() { ch <- true }()
+		f()
+	}()
+	<-ch
+}
+
+func TestCreationAndDestruction() {
+	N := 12
+	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
+	context.init(N)
+	context.makeWeaves(N)
+}
+
+func TestAllocFromOne() {
+	N := 3
+	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
+	context.init(N)
+	context.makeWeaves(N)
+	for i := 0; ; i++ {
+		_, err := context.clients[0].AllocateIPFor("foobar")
+		if err != nil {
+			lg.Info.Printf("Managed to allocate %d addresses\n", i)
+			break
 		}
 	}
-	{
-		N := 3
-		context2 := &testContext{apiPath: "unix:/var/run/docker.sock"}
-		context2.makeWeaves(N)
-		for i := 0; ; i++ {
-			client := rand.Intn(N)
-			_, err := context2.clients[client].AllocateIPFor("foobar")
-			if err != nil {
-				lg.Info.Printf("Managed to allocate %d addresses\n", i)
-				break
-			}
+}
+
+func TestAllocFromRand() {
+	N := 5
+	ips := make(map[string]int)
+	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
+	context.init(N)
+	context.makeWeaves(N)
+	for i := 0; ; i++ {
+		client := rand.Intn(N)
+		lg.Info.Printf("%d: Calling %d\n", i, client)
+		ip, err := context.clients[client].AllocateIPFor("foobar")
+		if err != nil {
+			lg.Info.Printf("Managed to allocate %d addresses\n", i)
+			break
 		}
+		if prevc, found := ips[ip]; found {
+			lg.Error.Fatalf("IP address %s already allocated from client %d", ip, prevc)
+		}
+		ips[ip] = client
 	}
 }
 
@@ -57,46 +90,80 @@ type testContext struct {
 
 const namePrefix = "testweave"
 
-func (context *testContext) makeWeaves(n int) {
+func (context *testContext) init(n int) {
 	var err error
 	context.dc, err = docker.NewClient(context.apiPath)
-	check(err, context.apiPath)
+	context.checkFatal(err, context.apiPath)
 
 	env, err := context.dc.Version()
-	check(err, context.apiPath)
+	context.checkFatal(err, context.apiPath)
 
 	events := make(chan *docker.APIEvents)
 	err = context.dc.AddEventListener(events)
-	check(err, context.apiPath)
+	context.checkFatal(err, context.apiPath)
 
 	lg.Info.Printf("[updater] Using Docker API on %s: %v", context.apiPath, env)
 
+	context.conts = make([]*docker.Container, n)
+	context.clients = make([]*weaveapi.Client, n)
+}
+
+func (context *testContext) makeWeaves(n int) {
 	context.deleteOldContainers()
 
 	// Give Docker and/or Linux time to react - if we don't sleep here
 	// we get "Network interface already exists" from NetworkCreateVethPair
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(time.Duration(100*n) * time.Millisecond)
 
 	// Start the Weave containers
-	context.conts = make([]*docker.Container, n)
-	context.clients = make([]*weaveapi.Client, n)
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("%s%d", namePrefix, i)
 		context.conts[i] = context.startOneWeave(name)
+		if context.conts[i] == nil {
+			lg.Error.Fatalf("Fatal error: when creating Weaves")
+		}
 		net := context.conts[i].NetworkSettings
 		context.clients[i] = weaveapi.NewClient(net.IPAddress)
 	}
 
 	// Give the Weaves time to start up
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(time.Duration(200*n) * time.Millisecond)
 
 	// Make some connections (note Docker assumed to be running with --icc=true)
 	for i := 0; i < n-1; i++ {
-		check(context.clients[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
+		context.check(context.clients[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
 	}
 
 	// Give the connections time to settle
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(time.Duration(100*n) * time.Millisecond)
+}
+
+func (context *testContext) addWeave(i int) {
+	name := fmt.Sprintf("%s%d", namePrefix, i)
+	context.conts[i] = context.startOneWeave(name)
+	net := context.conts[i].NetworkSettings
+	context.clients[i] = weaveapi.NewClient(net.IPAddress)
+
+	// Give the Weave time to start up
+	time.Sleep(time.Duration(200) * time.Millisecond)
+}
+
+func (context *testContext) connectWeave(i int) {
+	for pos, cont := range context.conts {
+		if pos != i && cont.State.Running {
+			context.check(context.clients[i].Connect(cont.NetworkSettings.IPAddress), "connect")
+			break
+		}
+	}
+	// Give the connection time to settle
+	time.Sleep(time.Duration(100) * time.Millisecond)
+}
+
+func (c *testContext) killWeave(i int) {
+	cont := c.conts[i]
+	c.check(c.dc.KillContainer(docker.KillContainerOptions{ID: cont.ID}), "kill container")
+	c.check(c.dc.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID}), "remove container")
+	cont.State.Running = false
 }
 
 // Delete any old containers created by this test prog
@@ -107,10 +174,10 @@ func (context *testContext) deleteOldContainers() {
 			if strings.HasPrefix(name, "/"+namePrefix) {
 				if strings.HasPrefix(cont.Status, "Up") {
 					lg.Info.Println("Killing", name)
-					checkFatal(context.dc.KillContainer(docker.KillContainerOptions{ID: cont.ID}))
+					context.checkFatal(context.dc.KillContainer(docker.KillContainerOptions{ID: cont.ID}), "kill container")
 				}
 				lg.Info.Println("Removing", cont.ID, cont.Names, cont.Status)
-				checkFatal(context.dc.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID}))
+				context.checkFatal(context.dc.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID}), "removing container")
 				break
 			}
 		}
@@ -118,75 +185,44 @@ func (context *testContext) deleteOldContainers() {
 }
 
 func (context *testContext) startOneWeave(name string) *docker.Container {
-	iface1, iface2 := createVeths(name)
+	iface1, iface2, err := createVeths(name)
+	context.check(err, "Creating veth pair")
 
 	config := &docker.Config{
 		Image: "zettio/weave",
-		Cmd:   []string{"-iface", "ethwe", "-api", "none", "-autoAddConnections=false", "-alloc", "10.0.0.0/22", "-debug"},
+		Cmd:   []string{"-iface", "ethwe"}, //, "-api", "none",
+		//"-autoAddConnections=false",
+		//"-alloc", "10.0.0.0/22", "-debug"},
 	}
 	opts := docker.CreateContainerOptions{Name: name, Config: config}
 	lg.Info.Println("Creating", name)
 	cont, err := context.dc.CreateContainer(opts)
-	checkFatal(err)
-
-	checkFatal(context.dc.StartContainer(cont.ID, nil))
-	cont, err = context.dc.InspectContainer(cont.ID)
-	checkFatal(err)
-	if !cont.State.Running {
-		lg.Error.Fatalf("Container %s (%s) exited immediately", name, cont.ID)
+	if err != nil {
+		lg.Error.Printf("Error when creating container: %s\n", err)
+		return nil
 	}
-	setupNetwork(cont, iface1, iface2)
+
+	err = context.dc.StartContainer(cont.ID, nil)
+	if err != nil {
+		lg.Error.Printf("Error when starting container: %s\n", err)
+		return nil
+	}
+	cont, err = context.dc.InspectContainer(cont.ID)
+	if !cont.State.Running {
+		lg.Error.Printf("Container %s (%s) exited immediately", name, cont.ID)
+	}
+	context.check(setupNetwork(cont.State.Pid, iface1, iface2), "setup network")
 	return cont
 }
 
-func createVeths(name string) (*net.Interface, *net.Interface) {
-	vethname1, vethname2 := name+"x", name+"y"
-	check(netlink.NetworkCreateVethPair(vethname1, vethname2, 42), "Creating veth pair")
-	iface1, err := net.InterfaceByName(vethname1)
-	check(err, "Finding interface")
-	iface2, err := net.InterfaceByName(vethname2)
-	check(err, "Finding interface")
-	return iface1, iface2
-}
-
-func setupNetwork(cont *docker.Container, iface1, iface2 *net.Interface) {
-	check(netlink.NetworkSetNsPid(iface2, cont.State.Pid), "Setting namespace")
-	check(withNetnsPid(cont.State.Pid, func() error {
-		if err := netlink.NetworkChangeName(iface2, "ethwe"); err != nil {
-			return err
-		}
-		if err := netlink.NetworkLinkUp(iface2); err != nil {
-			return err
-		}
-		return nil
-	}), "with netns")
-	check(netlink.NetworkLinkUp(iface1), "link up")
-}
-
-// equivalent of Weave script with_container_netns()
-func withNetnsPid(pid int, f func() error) error {
-	name := fmt.Sprintf("/proc/%d/ns/net", pid)
-	if pidnsfile, err := os.Open(name); err != nil {
-		return errors.New("Unable to open " + name + ": " + err.Error())
-	} else if selfnsfile, err := os.Open("/proc/self/ns/net"); err != nil {
-		return errors.New("Unable to open /proc/self/ns/net: " + err.Error())
-	} else {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		system.Setns(pidnsfile.Fd(), 0)
-		defer system.Setns(selfnsfile.Fd(), 0)
-		return f()
+func (c *testContext) checkFatal(err error, desc string) {
+	if err != nil {
+		lg.Error.Fatalf("Fatal error: %s: %s", desc, err)
 	}
 }
 
-func checkFatal(err error) {
+func (c *testContext) check(err error, desc string) {
 	if err != nil {
-		lg.Error.Fatalf("Fatal error: %s", err)
-	}
-}
-
-func check(err error, desc string) {
-	if err != nil {
-		lg.Error.Fatalf("%s: %s", desc, err)
+		lg.Error.Printf("%s: %s", desc, err)
 	}
 }
