@@ -8,6 +8,7 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	lg "github.com/zettio/weave/common"
 	"github.com/zettio/weave/weaveapi"
+	"math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -21,7 +22,30 @@ type weaver struct {
 }
 
 func main() {
-	makeWeaves(3)
+	{
+		context1 := &testContext{apiPath: "unix:/var/run/docker.sock"}
+		context1.makeWeaves(3)
+		for i := 0; ; i++ {
+			_, err := context1.clients[0].AllocateIPFor("foobar")
+			if err != nil {
+				lg.Info.Printf("Managed to allocate %d addresses\n", i)
+				break
+			}
+		}
+	}
+	{
+		N := 3
+		context2 := &testContext{apiPath: "unix:/var/run/docker.sock"}
+		context2.makeWeaves(N)
+		for i := 0; ; i++ {
+			client := rand.Intn(N)
+			_, err := context2.clients[client].AllocateIPFor("foobar")
+			if err != nil {
+				lg.Info.Printf("Managed to allocate %d addresses\n", i)
+				break
+			}
+		}
+	}
 }
 
 type testContext struct {
@@ -33,8 +57,7 @@ type testContext struct {
 
 const namePrefix = "testweave"
 
-func makeWeaves(n int) {
-	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
+func (context *testContext) makeWeaves(n int) {
 	var err error
 	context.dc, err = docker.NewClient(context.apiPath)
 	check(err, context.apiPath)
@@ -74,11 +97,6 @@ func makeWeaves(n int) {
 
 	// Give the connections time to settle
 	time.Sleep(200 * time.Millisecond)
-
-	for i := 0; ; i++ {
-		_, err := context.clients[0].AllocateIPFor("foobar")
-		check(err, "ip allocate")
-	}
 }
 
 // Delete any old containers created by this test prog
