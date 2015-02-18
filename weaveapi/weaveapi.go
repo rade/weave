@@ -14,15 +14,16 @@ type Client struct {
 }
 
 func httpGet(url string) (string, error) {
-	fmt.Println("Url", url)
 	if resp, err := http.Get(url); err != nil {
 		return "", err
-	} else if resp.StatusCode != http.StatusOK {
-		return "", errors.New(resp.Status)
 	} else {
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
-		return string(body), nil
+		if resp.StatusCode != http.StatusOK {
+			return "", errors.New(resp.Status + ": " + string(body))
+		} else {
+			return string(body), nil
+		}
 	}
 }
 
