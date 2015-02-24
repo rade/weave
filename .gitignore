@@ -31,4 +31,5 @@ _testmain.go
 weaver/weaver
 weavedns/weavedns
 tools/bin
+tools/build
 releases
