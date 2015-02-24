@@ -10,8 +10,9 @@ import (
 	"runtime"
 )
 
-func createVeths(name string) (*net.Interface, *net.Interface, error) {
-	vethname1, vethname2 := name+"x", name+"y"
+func createVeths(pid int) (*net.Interface, *net.Interface, error) {
+	pstr := fmt.Sprintf("%d", pid)
+	vethname1, vethname2 := namePrefix+pstr+"x", namePrefix+pstr+"y"
 	if err := netlink.NetworkCreateVethPair(vethname1, vethname2, 42); err != nil {
 		return nil, nil, err
 	}

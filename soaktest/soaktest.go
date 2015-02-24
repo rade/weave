@@ -40,10 +40,29 @@ func RunWithTimeout(d time.Duration, f func()) {
 }
 
 func TestCreationAndDestruction() {
-	N := 12
+	N := 22
+	longRunning := 11
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
 	context.init(N)
 	context.makeWeaves(N)
+	for {
+		oper := rand.Intn(2)
+		switch oper {
+		case 0: // kill a weave
+			i := rand.Intn(N-longRunning) + longRunning
+			if context.conts[i] != nil && context.conts[i].State.Running {
+				context.killWeave(context.conts[i])
+			}
+		case 1: // start a weave
+			i := rand.Intn(N-longRunning) + longRunning
+			if context.conts[i] == nil || !context.conts[i].State.Running {
+				context.makeWeave(i)
+				time.Sleep(time.Duration(500) * time.Millisecond)
+				context.connectWeave(i)
+			}
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func TestAllocFromOne() {
@@ -117,13 +136,7 @@ func (context *testContext) makeWeaves(n int) {
 
 	// Start the Weave containers
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("%s%d", namePrefix, i)
-		context.conts[i] = context.startOneWeave(name)
-		if context.conts[i] == nil {
-			lg.Error.Fatalf("Fatal error: when creating Weaves")
-		}
-		net := context.conts[i].NetworkSettings
-		context.clients[i] = weaveapi.NewClient(net.IPAddress)
+		context.makeWeave(i)
 	}
 
 	// Give the Weaves time to start up
@@ -138,14 +151,15 @@ func (context *testContext) makeWeaves(n int) {
 	time.Sleep(time.Duration(100*n) * time.Millisecond)
 }
 
-func (context *testContext) addWeave(i int) {
+func (context *testContext) makeWeave(i int) {
 	name := fmt.Sprintf("%s%d", namePrefix, i)
 	context.conts[i] = context.startOneWeave(name)
+	if context.conts[i] == nil {
+		lg.Error.Printf("Fatal error: when creating Weaves")
+		return
+	}
 	net := context.conts[i].NetworkSettings
 	context.clients[i] = weaveapi.NewClient(net.IPAddress)
-
-	// Give the Weave time to start up
-	time.Sleep(time.Duration(200) * time.Millisecond)
 }
 
 func (context *testContext) connectWeave(i int) {
@@ -159,8 +173,8 @@ func (context *testContext) connectWeave(i int) {
 	time.Sleep(time.Duration(100) * time.Millisecond)
 }
 
-func (c *testContext) killWeave(i int) {
-	cont := c.conts[i]
+func (c *testContext) killWeave(cont *docker.Container) {
+	lg.Info.Println("Killing weave", cont.Name)
 	c.check(c.dc.KillContainer(docker.KillContainerOptions{ID: cont.ID}), "kill container")
 	c.check(c.dc.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID}), "remove container")
 	cont.State.Running = false
@@ -185,9 +199,6 @@ func (context *testContext) deleteOldContainers() {
 }
 
 func (context *testContext) startOneWeave(name string) *docker.Container {
-	iface1, iface2, err := createVeths(name)
-	context.check(err, "Creating veth pair")
-
 	config := &docker.Config{
 		Image: "zettio/weave",
 		Cmd:   []string{"-iface", "ethwe"}, //, "-api", "none",
@@ -210,6 +221,12 @@ func (context *testContext) startOneWeave(name string) *docker.Container {
 	cont, err = context.dc.InspectContainer(cont.ID)
 	if !cont.State.Running {
 		lg.Error.Printf("Container %s (%s) exited immediately", name, cont.ID)
+	}
+
+	iface1, iface2, err := createVeths(cont.State.Pid)
+	if err != nil {
+		lg.Error.Printf("Error when creating veth pair %s: %s\n", name, err)
+		return nil
 	}
 	context.check(setupNetwork(cont.State.Pid, iface1, iface2), "setup network")
 	return cont
