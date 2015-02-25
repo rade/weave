@@ -22,8 +22,8 @@ options are described below.
 ## Building directly on Ubuntu
 
 The weave git repository should be cloned into
-`$GOPATH/src/github.com/zettio/weave`, in accordance with (the go
-workspace conventions)[https://golang.org/doc/code.html#Workspaces]:
+`$GOPATH/src/github.com/zettio/weave`, in accordance with [the go
+workspace conventions](https://golang.org/doc/code.html#Workspaces):
 
 ```bash
 $ WEAVE=github.com/zettio/weave
@@ -31,11 +31,15 @@ $ git clone https://$WEAVE $GOPATH/src/$WEAVE
 $ cd $GOPATH/src/$WEAVE
 ```
 
-Several prerequisites are needed to build weave.  To install these, in
-the weave directory do:
+Some prerequisites are needed to build weave.  First, install Docker
+if you haven't already, by following the instructions [on the Docker
+site](https://docs.docker.com/installation/ubuntulinux/).  Note that
+we recommend using the Docker-maintained `lxc-docker` package, rather
+than the `docker.io` package which contains a very old version.  Then
+install the other prerequisites for building with:
 
 ```bash
-$ make prerequisites
+$ sudo apt-get install build-essential git golang mercurial libpcap-dev
 ```
 
 Then to actually build, simply do:
@@ -47,7 +51,7 @@ $ make
 This will build the weave components and package them into three
 Docker images (`zettio/weave`, `zettio/weavedns`, and
 `zettio/weavetools`).  These are then exported (as
-`/var/tmp/weave.tar`, `weavends.tar` and `weavetools.tar`).
+`weave.tar`, `weavends.tar` and `weavetools.tar`).
 
 ## Building in a Docker container
 

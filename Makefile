@@ -14,9 +14,9 @@ WEAVETOOLS_EXES=tools/bin
 WEAVER_IMAGE=$(DOCKERHUB_USER)/weave
 WEAVEDNS_IMAGE=$(DOCKERHUB_USER)/weavedns
 WEAVETOOLS_IMAGE=$(DOCKERHUB_USER)/weavetools
-WEAVER_EXPORT=/var/tmp/weave.tar
-WEAVEDNS_EXPORT=/var/tmp/weavedns.tar
-WEAVETOOLS_EXPORT=/var/tmp/weavetools.tar
+WEAVER_EXPORT=weave.tar
+WEAVEDNS_EXPORT=weavedns.tar
+WEAVETOOLS_EXPORT=weavetools.tar
 
 all: $(WEAVER_EXPORT) $(WEAVEDNS_EXPORT) $(WEAVETOOLS_EXPORT)
 
@@ -79,11 +79,7 @@ clean:
 	rm -f $(WEAVER_EXE) $(WEAVEDNS_EXE) $(WEAVER_EXPORT) $(WEAVEDNS_EXPORT) $(WEAVETOOLS_EXPORT)
 	$(SUDO) rm -rf $(WEAVETOOLS_EXES)
 
-prerequisites:
-	$(SUDO) apt-get -y update
-	$(SUDO) apt-get -y install --no-install-recommends build-essential git ca-certificates golang docker.io mercurial libpcap-dev
-
-build: prerequisites
+build:
 	$(SUDO) go clean -i net
 	$(SUDO) go install -tags netgo std
 	$(MAKE) build_weavetools_exes_in_container=
