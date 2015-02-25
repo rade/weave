@@ -8,6 +8,7 @@ import (
 	"github.com/zettio/weave/weaveapi"
 	"math/rand"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -201,10 +202,11 @@ func (context *testContext) deleteOldContainers() {
 func (context *testContext) startOneWeave(name string) *docker.Container {
 	config := &docker.Config{
 		Image: "zettio/weave",
-		Cmd:   []string{"-iface", "ethwe"}, //, "-api", "none",
+		Cmd:   []string{"-iface", "ethwe", "--nickname", name}, //, "-api", "none",
 		//"-autoAddConnections=false",
 		//"-alloc", "10.0.0.0/22", "-debug"},
 	}
+	config.Cmd = append(config.Cmd, os.Args[1:]...)
 	opts := docker.CreateContainerOptions{Name: name, Config: config}
 	lg.Info.Println("Creating", name)
 	cont, err := context.dc.CreateContainer(opts)
