@@ -21,7 +21,8 @@ type weaver struct {
 func main() {
 	//RunWithTimeout(10*time.Second, TestAllocFromOne)
 	//RunWithTimeout(20*time.Second, TestAllocFromRand)
-	TestCreationAndDestruction()
+	//TestCreationAndDestruction()
+	TestAllocAndDelete()
 }
 
 // Borrowed from net/http tests:
@@ -70,7 +71,7 @@ func TestAllocFromOne() {
 	N := 3
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
 	context.init(N)
-	context.makeWeaves(N)
+	context.makeWeaves(N, "-alloc", "10.0.0.0/22")
 	for i := 0; ; i++ {
 		_, err := context.clients[0].AllocateIPFor("foobar")
 		if err != nil {
@@ -85,7 +86,7 @@ func TestAllocFromRand() {
 	ips := make(map[string]int)
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
 	context.init(N)
-	context.makeWeaves(N)
+	context.makeWeaves(N, "-alloc", "10.0.0.0/22")
 	for i := 0; ; i++ {
 		client := rand.Intn(N)
 		lg.Info.Printf("%d: Calling %d\n", i, client)
@@ -95,9 +96,72 @@ func TestAllocFromRand() {
 			break
 		}
 		if prevc, found := ips[ip]; found {
-			lg.Error.Fatalf("IP address %s already allocated from client %d", ip, prevc)
+			lg.Error.Fatalf("IP address %s already allocated from weave %d", ip, prevc)
 		}
 		ips[ip] = client
+	}
+}
+
+func TestAllocAndDelete() {
+	N := 5
+	const MaxAddresses = 1022 // based on /22 address range
+	ips := make([]string, MaxAddresses)
+	ipmap := make(map[string]int)
+
+	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
+	context.init(N)
+	context.makeWeaves(N, "-alloc", "10.0.0.0/22")
+
+	allocate := func(client, n int) {
+		ident := fmt.Sprintf("client%d", n)
+		cidr, err := context.clients[client].AllocateIPFor(ident)
+		part := strings.Split(cidr, "/")
+		if err != nil {
+			lg.Info.Printf("Error with %d addresses allocated: %s", n, err)
+		} else if prevc, found := ipmap[part[0]]; found {
+			lg.Error.Fatalf("IP address %s returned from weave %d already allocated from weave %d", part[0], client, prevc)
+		} else {
+			lg.Info.Printf("Allocated %s for %s from %d\n", cidr, ident, client)
+			ips[n] = part[0]
+			ipmap[part[0]] = client
+		}
+	}
+
+	for i := 0; i < MaxAddresses*9/10; i++ {
+		client := rand.Intn(N)
+		allocate(client, i)
+	}
+	for {
+		oper := rand.Intn(2)
+		switch oper {
+		case 0: // free
+			n := rand.Intn(MaxAddresses)
+			ip := ips[n]
+			if ip == "" {
+				break
+			}
+			client := ipmap[ip]
+			ident := fmt.Sprintf("client%d", n)
+			lg.Info.Printf("Freeing %s/%s from %d", ident, ip, client)
+			_, err := context.clients[client].FreeIPFor(ip, ident)
+			if err != nil {
+				lg.Info.Printf("Error on freeing %s: %s", ip, err)
+			} else {
+				delete(ipmap, ip)
+				ips[n] = ""
+			}
+		case 1: // allocate multiple addresses from the same peer
+			client := rand.Intn(N)
+			num := rand.Intn(100)
+			for i := 0; i < num; i++ {
+				n := rand.Intn(MaxAddresses)
+				if ips[n] != "" {
+					continue
+				}
+				allocate(client, n)
+			}
+		}
+		time.Sleep(time.Second / 10)
 	}
 }
 
@@ -128,7 +192,7 @@ func (context *testContext) init(n int) {
 	context.clients = make([]*weaveapi.Client, n)
 }
 
-func (context *testContext) makeWeaves(n int) {
+func (context *testContext) makeWeaves(n int, args ...string) {
 	context.deleteOldContainers()
 
 	// Give Docker and/or Linux time to react - if we don't sleep here
@@ -137,7 +201,7 @@ func (context *testContext) makeWeaves(n int) {
 
 	// Start the Weave containers
 	for i := 0; i < n; i++ {
-		context.makeWeave(i)
+		context.makeWeave(i, args...)
 	}
 
 	// Give the Weaves time to start up
@@ -152,9 +216,9 @@ func (context *testContext) makeWeaves(n int) {
 	time.Sleep(time.Duration(100*n) * time.Millisecond)
 }
 
-func (context *testContext) makeWeave(i int) {
+func (context *testContext) makeWeave(i int, args ...string) {
 	name := fmt.Sprintf("%s%d", namePrefix, i)
-	context.conts[i] = context.startOneWeave(name)
+	context.conts[i] = context.startOneWeave(name, args...)
 	if context.conts[i] == nil {
 		lg.Error.Printf("Fatal error: when creating Weaves")
 		return
@@ -199,7 +263,7 @@ func (context *testContext) deleteOldContainers() {
 	}
 }
 
-func (context *testContext) startOneWeave(name string) *docker.Container {
+func (context *testContext) startOneWeave(name string, args ...string) *docker.Container {
 	config := &docker.Config{
 		Image: "zettio/weave",
 		Cmd:   []string{"-iface", "ethwe", "--nickname", name}, //, "-api", "none",
@@ -207,6 +271,7 @@ func (context *testContext) startOneWeave(name string) *docker.Container {
 		//"-alloc", "10.0.0.0/22", "-debug"},
 	}
 	config.Cmd = append(config.Cmd, os.Args[1:]...)
+	config.Cmd = append(config.Cmd, args...)
 	opts := docker.CreateContainerOptions{Name: name, Config: config}
 	lg.Info.Println("Creating", name)
 	cont, err := context.dc.CreateContainer(opts)
