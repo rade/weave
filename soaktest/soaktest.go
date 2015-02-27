@@ -228,9 +228,18 @@ func (context *testContext) makeWeave(i int, args ...string) {
 }
 
 func (context *testContext) connectWeave(i int) {
+	const MaxRetries = 5
 	for pos, cont := range context.conts {
 		if pos != i && cont.State.Running {
-			context.check(context.clients[i].Connect(cont.NetworkSettings.IPAddress), "connect")
+			var err error
+			for count := 0; count < MaxRetries; count++ {
+				err = context.clients[i].Connect(cont.NetworkSettings.IPAddress)
+				if err == nil {
+					break
+				}
+				time.Sleep(time.Second)
+			}
+			context.check(err, "connect")
 			break
 		}
 	}
