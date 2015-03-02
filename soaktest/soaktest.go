@@ -289,7 +289,10 @@ func (context *testContext) startOneWeave(name string, args ...string) *docker.C
 		return nil
 	}
 
-	err = context.dc.StartContainer(cont.ID, nil)
+	hostConfig := &docker.HostConfig{
+		Binds: []string{"/var/run/docker.sock:/var/run/docker.sock"},
+	}
+	err = context.dc.StartContainer(cont.ID, hostConfig)
 	if err != nil {
 		lg.Error.Printf("Error when starting container: %s\n", err)
 		return nil
