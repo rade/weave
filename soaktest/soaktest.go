@@ -145,7 +145,7 @@ func TestAllocAndDelete() {
 			lg.Info.Printf("Freeing %s/%s from %d", ident, ip, client)
 			_, err := context.clients[client].FreeIPFor(ip, ident)
 			if err != nil {
-				lg.Info.Printf("Error on freeing %s: %s", ip, err)
+				lg.Error.Fatalf("Error on freeing %s: %s", ip, err)
 			} else {
 				delete(ipmap, ip)
 				ips[n] = ""
