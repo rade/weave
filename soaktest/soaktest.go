@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func main() {
 	//RunWithTimeout(10*time.Second, TestAllocFromOne)
 	//RunWithTimeout(20*time.Second, TestAllocFromRand)
 	//TestCreationAndDestruction()
-	TestAllocAndDelete()
+	TestAllocAndDelete(5, 10)
 }
 
 // Borrowed from net/http tests:
@@ -73,7 +74,7 @@ func TestAllocFromOne() {
 	context.init(N)
 	context.makeWeaves(N, "-alloc", "10.0.0.0/22")
 	for i := 0; ; i++ {
-		_, err := context.clients[0].AllocateIPFor("foobar")
+		_, err := context.weaves[0].AllocateIPFor("foobar")
 		if err != nil {
 			lg.Info.Printf("Managed to allocate %d addresses\n", i)
 			break
@@ -90,7 +91,7 @@ func TestAllocFromRand() {
 	for i := 0; ; i++ {
 		client := rand.Intn(N)
 		lg.Info.Printf("%d: Calling %d\n", i, client)
-		ip, err := context.clients[client].AllocateIPFor("foobar")
+		ip, err := context.weaves[client].AllocateIPFor("foobar")
 		if err != nil {
 			lg.Info.Printf("Managed to allocate %d addresses\n", i)
 			break
@@ -102,74 +103,145 @@ func TestAllocFromRand() {
 	}
 }
 
-func TestAllocAndDelete() {
-	N := 5
+// Types used to communicate between driver and action routines
+type allocOper struct {
+	weaveNum      int
+	containerNums []int
+}
+
+type freeOper struct {
+	weaveNum     int
+	ip           string
+	containerNum int
+}
+
+func TestAllocAndDelete(numWeaves, numGoroutines int) {
 	const MaxAddresses = 1022 // based on /22 address range
-	ips := make([]string, MaxAddresses)
-	ipmap := make(map[string]int)
+	const MaxContainers = 1100
 
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
-	context.init(N)
-	context.makeWeaves(N, "-alloc", "10.0.0.0/22")
+	context.init(numWeaves)
+	context.makeWeaves(numWeaves, "-alloc", "10.0.0.0/22")
+	context.ips = make([]string, MaxContainers)
+	context.ipmap = make(map[string]int)
 
-	allocate := func(client, n int) {
-		ident := fmt.Sprintf("client%d", n)
-		cidr, err := context.clients[client].AllocateIPFor(ident)
-		part := strings.Split(cidr, "/")
-		if err != nil {
-			lg.Info.Printf("Error with %d addresses allocated: %s", n, err)
-		} else if prevc, found := ipmap[part[0]]; found {
-			lg.Error.Fatalf("IP address %s returned from weave %d already allocated from weave %d", part[0], client, prevc)
-		} else {
-			lg.Info.Printf("Allocated %s for %s from %d\n", cidr, ident, client)
-			ips[n] = part[0]
-			ipmap[part[0]] = client
-		}
-	}
-
+	// Do some allocations to get going
 	for i := 0; i < MaxAddresses*9/10; i++ {
-		client := rand.Intn(N)
-		allocate(client, i)
+		client := rand.Intn(numWeaves)
+		context.allocate(client, i)
+	}
+	channel := make(chan interface{}, 4)
+	for i := 0; i < numGoroutines; i++ {
+		go context.actionLoop(channel)
 	}
 	for {
 		oper := rand.Intn(2)
 		switch oper {
 		case 0: // free
-			n := rand.Intn(MaxAddresses)
-			ip := ips[n]
-			if ip == "" {
-				break
-			}
-			client := ipmap[ip]
-			ident := fmt.Sprintf("client%d", n)
-			lg.Info.Printf("Freeing %s/%s from %d", ident, ip, client)
-			_, err := context.clients[client].FreeIPFor(ip, ident)
-			if err != nil {
-				lg.Error.Fatalf("Error on freeing %s: %s", ip, err)
+			context.Lock()
+			n := rand.Intn(len(context.ips))
+			ip := context.ips[n]
+			if ip != "" && ip != "pending" {
+				weaveNum := context.ipmap[ip]
+				// Clear out the entries so we don't try to free them again
+				delete(context.ipmap, ip)
+				context.ips[n] = "pending"
+				context.Unlock()
+				channel <- freeOper{weaveNum: weaveNum, ip: ip, containerNum: n}
 			} else {
-				delete(ipmap, ip)
-				ips[n] = ""
+				context.Unlock()
 			}
 		case 1: // allocate multiple addresses from the same peer
-			client := rand.Intn(N)
+			client := rand.Intn(len(context.weaves))
 			num := rand.Intn(100)
+			op := allocOper{weaveNum: client, containerNums: make([]int, 0)}
 			for i := 0; i < num; i++ {
-				n := rand.Intn(MaxAddresses)
-				if ips[n] != "" {
-					continue
+				context.Lock()
+				n := rand.Intn(len(context.ips))
+				if context.ips[n] == "" {
+					op.containerNums = append(op.containerNums, n)
+					context.ips[n] = "pending"
 				}
-				allocate(client, n)
+				context.Unlock()
 			}
+			channel <- op
 		}
-		time.Sleep(time.Second / 10)
+	}
+}
+
+func (context *testContext) countAllocatedIPs() int {
+	count := 0
+	for _, ip := range context.ips {
+		if ip != "" && ip != "pending" {
+			count++
+		}
+	}
+	return count
+}
+
+func (context *testContext) allocate(weaveNum, containerNum int) {
+	ident := fmt.Sprintf("container%d", containerNum)
+	cidr, err := context.weaves[weaveNum].AllocateIPFor(ident)
+	part := strings.Split(cidr, "/")
+	context.Lock()
+	if err != nil && err.Error() == "503 Service Unavailable: No free addresses\n" {
+		lg.Info.Printf("Out of addresses with %d allocated", context.countAllocatedIPs())
+	} else if err != nil {
+		lg.Error.Fatalf("Error when allocating: %s", err)
+	} else if len(part) != 2 {
+		lg.Error.Fatalf("Bad adress returned: %s", cidr)
+	} else {
+		ip := part[0]
+		if prevc, found := context.ipmap[ip]; found && context.ips[containerNum] != ip {
+			lg.Error.Fatalf("IP address %s returned from weave %d already allocated from weave %d", part[0], weaveNum, prevc)
+		} else {
+			lg.Info.Printf("Allocated %s for %s from %d\n", cidr, ident, weaveNum)
+			context.ips[containerNum] = part[0]
+			context.ipmap[part[0]] = weaveNum
+		}
+	}
+	context.Unlock()
+}
+
+// expected to be run on multiple goroutines
+func (context *testContext) actionLoop(input <-chan interface{}) {
+	for {
+		select {
+		case in, ok := <-input:
+			if !ok {
+				return
+			}
+			switch op := in.(type) {
+			case freeOper:
+				ident := fmt.Sprintf("container%d", op.containerNum)
+				lg.Info.Printf("Freeing %s/%s from %d", ident, op.ip, op.weaveNum)
+				_, err := context.weaves[op.weaveNum].FreeIPFor(op.ip, ident)
+				if err != nil {
+					lg.Error.Fatalf("Error on freeing %s: %s", op.ip, err)
+				}
+				context.Lock()
+				context.ips[op.containerNum] = ""
+				context.Unlock()
+			case allocOper: // allocate multiple addresses from the same peer
+				for _, n := range op.containerNums {
+					context.allocate(op.weaveNum, n)
+				}
+			default:
+				lg.Error.Printf("Unexpected message %+v", op)
+			}
+			time.Sleep(time.Second / 10)
+		}
 	}
 }
 
 type testContext struct {
+	sync.Mutex
 	apiPath string
 	dc      *docker.Client
 	conts   []*docker.Container
-	clients []*weaveapi.Client
+	weaves  []*weaveapi.Client
+	ips     []string
+	ipmap   map[string]int
 }
 
 const namePrefix = "testweave"
@@ -182,14 +254,14 @@ func (context *testContext) init(n int) {
 	env, err := context.dc.Version()
 	context.checkFatal(err, context.apiPath)
 
-	events := make(chan *docker.APIEvents)
-	err = context.dc.AddEventListener(events)
-	context.checkFatal(err, context.apiPath)
+	//events := make(chan *docker.APIEvents)
+	//err = context.dc.AddEventListener(events)
+	//context.checkFatal(err, context.apiPath)
 
 	lg.Info.Printf("[updater] Using Docker API on %s: %v", context.apiPath, env)
 
 	context.conts = make([]*docker.Container, n)
-	context.clients = make([]*weaveapi.Client, n)
+	context.weaves = make([]*weaveapi.Client, n)
 }
 
 func (context *testContext) makeWeaves(n int, args ...string) {
@@ -209,7 +281,7 @@ func (context *testContext) makeWeaves(n int, args ...string) {
 
 	// Make some connections (note Docker assumed to be running with --icc=true)
 	for i := 0; i < n-1; i++ {
-		context.check(context.clients[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
+		context.check(context.weaves[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
 	}
 
 	// Give the connections time to settle
@@ -224,7 +296,7 @@ func (context *testContext) makeWeave(i int, args ...string) {
 		return
 	}
 	net := context.conts[i].NetworkSettings
-	context.clients[i] = weaveapi.NewClient(net.IPAddress)
+	context.weaves[i] = weaveapi.NewClient(net.IPAddress)
 }
 
 func (context *testContext) connectWeave(i int) {
@@ -233,7 +305,7 @@ func (context *testContext) connectWeave(i int) {
 		if pos != i && cont.State.Running {
 			var err error
 			for count := 0; count < MaxRetries; count++ {
-				err = context.clients[i].Connect(cont.NetworkSettings.IPAddress)
+				err = context.weaves[i].Connect(cont.NetworkSettings.IPAddress)
 				if err == nil {
 					break
 				}
