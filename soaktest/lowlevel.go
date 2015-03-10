@@ -11,8 +11,9 @@ import (
 )
 
 func createVeths(pid int) (*net.Interface, *net.Interface, error) {
+	const vethPrefix = "vethwe"
 	pstr := fmt.Sprintf("%d", pid)
-	vethname1, vethname2 := namePrefix+pstr+"x", namePrefix+pstr+"y"
+	vethname1, vethname2 := vethPrefix+"pl"+pstr, vethPrefix+"pg"+pstr
 	if err := netlink.NetworkCreateVethPair(vethname1, vethname2, 42); err != nil {
 		return nil, nil, err
 	}
