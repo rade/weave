@@ -22,8 +22,8 @@ type weaver struct {
 func main() {
 	//RunWithTimeout(10*time.Second, TestAllocFromOne)
 	//RunWithTimeout(20*time.Second, TestAllocFromRand)
-	//TestCreationAndDestruction()
-	TestAllocAndDelete(5, 10)
+	TestCreationAndDestruction()
+	//TestAllocAndDelete(5, 10)
 }
 
 // Borrowed from net/http tests:
@@ -43,8 +43,8 @@ func RunWithTimeout(d time.Duration, f func()) {
 }
 
 func TestCreationAndDestruction() {
-	N := 22
-	longRunning := 11
+	N := 25
+	longRunning := 24
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
 	context.init(N)
 	context.makeWeaves(N)
