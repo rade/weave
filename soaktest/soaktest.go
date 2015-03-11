@@ -281,7 +281,14 @@ func (context *testContext) makeWeaves(n int, args ...string) {
 
 	// Make some connections (note Docker assumed to be running with --icc=true)
 	for i := 0; i < n-1; i++ {
-		context.check(context.weaves[i].Connect(context.conts[i+1].NetworkSettings.IPAddress), "connect")
+		err := context.weaves[i].Connect(context.conts[i+1].NetworkSettings.IPAddress)
+		if err != nil {
+			cont, err := context.dc.InspectContainer(context.conts[i].ID)
+			if err == nil && !cont.State.Running {
+				lg.Error.Fatalf("Container %s (%s) has exited", cont.Name, cont.ID)
+			}
+		}
+		context.check(err, "connect")
 	}
 
 	// Give the connections time to settle
@@ -370,8 +377,9 @@ func (context *testContext) startOneWeave(name string, args ...string) *docker.C
 		return nil
 	}
 	cont, err = context.dc.InspectContainer(cont.ID)
-	if !cont.State.Running {
-		lg.Error.Printf("Container %s (%s) exited immediately", name, cont.ID)
+	if err != nil || !cont.State.Running {
+		lg.Error.Printf("Container %s (%s) did not run (%s)", name, cont.ID, err)
+		return nil
 	}
 
 	iface1, iface2, err := createVeths(cont.State.Pid)
@@ -379,7 +387,13 @@ func (context *testContext) startOneWeave(name string, args ...string) *docker.C
 		lg.Error.Printf("Error when creating veth pair %s: %s\n", name, err)
 		return nil
 	}
-	context.check(setupNetwork(cont.State.Pid, iface1, iface2), "setup network")
+	err = setupNetwork(cont.State.Pid, iface1, iface2)
+	if err != nil {
+		lg.Error.Printf("Error when setting up network: %s\n", err)
+		destroyVeths(cont.State.Pid)
+		return nil
+	}
+
 	return cont
 }
 

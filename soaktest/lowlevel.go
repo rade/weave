@@ -10,10 +10,14 @@ import (
 	"runtime"
 )
 
-func createVeths(pid int) (*net.Interface, *net.Interface, error) {
+func vethNames(pid int) (name1, name2 string) {
 	const vethPrefix = "vethwe"
 	pstr := fmt.Sprintf("%d", pid)
-	vethname1, vethname2 := vethPrefix+"pl"+pstr, vethPrefix+"pg"+pstr
+	return vethPrefix + "pl" + pstr, vethPrefix + "pg" + pstr
+}
+
+func createVeths(pid int) (*net.Interface, *net.Interface, error) {
+	vethname1, vethname2 := vethNames(pid)
 	if err := netlink.NetworkCreateVethPair(vethname1, vethname2, 42); err != nil {
 		return nil, nil, err
 	}
@@ -26,6 +30,12 @@ func createVeths(pid int) (*net.Interface, *net.Interface, error) {
 		return nil, nil, err
 	}
 	return iface1, iface2, nil
+}
+
+func destroyVeths(pid int) {
+	vethname1, vethname2 := vethNames(pid)
+	netlink.NetworkLinkDel(vethname1)
+	netlink.NetworkLinkDel(vethname2)
 }
 
 func setupNetwork(pid int, iface1, iface2 *net.Interface) error {
