@@ -44,10 +44,13 @@ func RunWithTimeout(d time.Duration, f func()) {
 
 func TestCreationAndDestruction() {
 	N := 25
-	longRunning := 24
+	longRunning := 25
 	context := &testContext{apiPath: "unix:/var/run/docker.sock"}
 	context.init(N)
 	context.makeWeaves(N)
+	if longRunning >= N {
+		return
+	}
 	for {
 		oper := rand.Intn(2)
 		switch oper {
@@ -289,6 +292,7 @@ func (context *testContext) makeWeaves(n int, args ...string) {
 			}
 		}
 		context.check(err, "connect")
+		time.Sleep(time.Duration(500*i*(i/5+1)) * time.Millisecond)
 	}
 
 	// Give the connections time to settle
