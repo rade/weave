@@ -45,14 +45,14 @@ type gossipUpdateSender struct {
 	sync.Mutex
 	pending    GossipKeySet   // which data needs sent
 	data       GossipData     // so we can get the latest version of the data
-	conn       Connection     // we send the data down this connection
+	sender     ProtocolSender // does the actual sending
 	gossipChan *GossipChannel // to tag the outgoing message
 	sendChan   chan<- bool    // channel to sending goroutine
 }
 
-func (c *GossipChannel) makeSender(data GossipData, conn Connection) *gossipUpdateSender {
+func (c *GossipChannel) makeSender(data GossipData, pSender ProtocolSender) *gossipUpdateSender {
 	sendChan := make(chan bool, 1)
-	sender := &gossipUpdateSender{pending: data.EmptySet(), data: data, conn: conn, gossipChan: c, sendChan: sendChan}
+	sender := &gossipUpdateSender{pending: data.EmptySet(), data: data, sender: pSender, gossipChan: c, sendChan: sendChan}
 	go sender.sendingLoop(sendChan)
 	return sender
 }
@@ -63,7 +63,7 @@ func (sender *gossipUpdateSender) sendAllPending() {
 	sender.pending = sender.data.EmptySet() // Clear out the map
 	sender.Unlock()                         // don't hold the lock while calling Encode which may take other locks
 	buf := sender.data.Encode(pending)
-	sender.conn.(ProtocolSender).SendProtocolMsg(sender.gossipChan.gossipMsg(buf))
+	sender.sender.SendProtocolMsg(sender.gossipChan.gossipMsg(buf))
 }
 
 func (sender *gossipUpdateSender) sendingLoop(sendingChan <-chan bool) {
@@ -191,7 +191,7 @@ func (c *GossipChannel) SendGossipUpdateFor(updateSet GossipKeySet) {
 	for _, conn := range connections {
 		sender, found := c.senders[conn]
 		if !found {
-			sender = c.makeSender(c.data, conn)
+			sender = c.makeSender(c.data, conn.(ProtocolSender))
 			c.senders[conn] = sender
 		}
 		// holding a lock on GossipChannel, we lock Sender
