@@ -37,11 +37,9 @@ type Gossiper interface {
 // Accumulates GossipData that needs to be sent to one destination,
 // and sends it when possible.
 type GossipSender struct {
-	sync.Mutex
-	channel  *GossipChannel
-	sender   ProtocolSender
-	pending  GossipData
-	sendChan chan<- bool
+	channel *GossipChannel
+	sender  ProtocolSender
+	cell    chan GossipData
 }
 
 func NewGossipSender(c *GossipChannel, ps ProtocolSender) *GossipSender {
@@ -49,48 +47,37 @@ func NewGossipSender(c *GossipChannel, ps ProtocolSender) *GossipSender {
 }
 
 func (sender *GossipSender) Start() {
-	sendChan := make(chan bool, 1)
-	sender.sendChan = sendChan
-	go sender.run(sendChan)
+	sender.cell = make(chan GossipData, 1)
+	go sender.run()
 }
 
-func (sender *GossipSender) run(sendingChan <-chan bool) {
+func (sender *GossipSender) run() {
 	for {
-		if val := <-sendingChan; !val { // receive zero value when chan is closed
+		if pending := <-sender.cell; pending == nil { // receive zero value when chan is closed
 			break
+		} else {
+			sender.sendPending(pending)
 		}
-		sender.sendPending()
 	}
 }
 
-func (sender *GossipSender) sendPending() bool {
-	sender.Lock()
-	pending := sender.pending
-	sender.pending = nil
-	sender.Unlock() // don't hold the lock while calling Encode which may take other locks
-	if pending == nil {
-		return false
-	}
+func (sender *GossipSender) sendPending(pending GossipData) {
 	sender.sender.SendProtocolMsg(sender.channel.gossipMsg(pending.Encode()))
-	return true
 }
 
 func (sender *GossipSender) Send(data GossipData) {
-	sender.Lock()
-	if sender.pending == nil {
-		sender.pending = data
-	} else {
-		sender.pending.Merge(data)
-	}
-	sender.Unlock()
-	select { // non-blocking send
-	case sender.sendChan <- true:
+	// NB: this must not be invoked concurrently
+	select {
+	case pending := <-sender.cell:
+		pending.Merge(data)
+		sender.cell <- pending
 	default:
+		sender.cell <- data
 	}
 }
 
 func (sender *GossipSender) Stop() {
-	close(sender.sendChan)
+	close(sender.cell)
 }
 
 type senderMap map[Connection]*GossipSender
