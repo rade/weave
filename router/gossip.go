@@ -57,15 +57,6 @@ func (c *GossipChannel) makeSender(data GossipData, pSender ProtocolSender) *gos
 	return sender
 }
 
-func (sender *gossipUpdateSender) sendAllPending() {
-	sender.Lock()
-	pending := sender.pending
-	sender.pending = sender.data.EmptySet() // Clear out the map
-	sender.Unlock()                         // don't hold the lock while calling Encode which may take other locks
-	buf := sender.data.Encode(pending)
-	sender.sender.SendProtocolMsg(sender.gossipChan.gossipMsg(buf))
-}
-
 func (sender *gossipUpdateSender) sendingLoop(sendingChan <-chan bool) {
 	for {
 		if val := <-sendingChan; !val { // receive zero value when chan is closed
@@ -73,6 +64,15 @@ func (sender *gossipUpdateSender) sendingLoop(sendingChan <-chan bool) {
 		}
 		sender.sendAllPending()
 	}
+}
+
+func (sender *gossipUpdateSender) sendAllPending() {
+	sender.Lock()
+	pending := sender.pending
+	sender.pending = sender.data.EmptySet() // Clear out the map
+	sender.Unlock()                         // don't hold the lock while calling Encode which may take other locks
+	buf := sender.data.Encode(pending)
+	sender.sender.SendProtocolMsg(sender.gossipChan.gossipMsg(buf))
 }
 
 func (sender *gossipUpdateSender) send(updateSet GossipKeySet) {
