@@ -205,7 +205,6 @@ func (c *GossipChannel) sendGossipDown(conn Connection, data GossipData) {
 		c.senders[conn] = sender
 		sender.Start()
 	}
-	// our callers hold a lock on c; we lock sender
 	sender.Send(data)
 }
 
