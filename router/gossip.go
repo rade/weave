@@ -75,6 +75,20 @@ func (sender *gossipUpdateSender) sendingLoop(sendingChan <-chan bool) {
 	}
 }
 
+func (sender *gossipUpdateSender) send(updateSet GossipKeySet) {
+	sender.Lock()
+	sender.pending.Merge(updateSet)
+	sender.Unlock()
+	select { // non-blocking send
+	case sender.sendChan <- true:
+	default:
+	}
+}
+
+func (sender *gossipUpdateSender) stop() {
+	close(sender.sendChan)
+}
+
 type senderMap map[Connection]*gossipUpdateSender
 
 type GossipChannel struct {
@@ -119,7 +133,7 @@ func (c *GossipChannel) garbageCollectSenders() {
 		delete(c.senders, conn)
 	}
 	for _, sender := range c.senders {
-		close(sender.sendChan)
+		sender.stop()
 	}
 	c.senders = newSenders
 }
@@ -195,13 +209,7 @@ func (c *GossipChannel) SendGossipUpdateFor(updateSet GossipKeySet) {
 			c.senders[conn] = sender
 		}
 		// holding a lock on GossipChannel, we lock Sender
-		sender.Lock()
-		sender.pending.Merge(updateSet)
-		sender.Unlock()
-		select { // non-blocking send
-		case sender.sendChan <- true:
-		default:
-		}
+		sender.send(updateSet)
 	}
 }
 
