@@ -190,12 +190,19 @@ func deliverGossip(channel *GossipChannel, srcName PeerName, _ []byte, dec *gob.
 
 func (c *GossipChannel) SendGossip(data GossipData) {
 	connections := c.ourself.Connections() // do this outside the lock so they don't nest
+	retainedSenders := make(senderMap)
 	c.Lock()
+	defer c.Unlock()
 	for _, conn := range connections {
 		c.sendGossipDown(conn, data)
+		retainedSenders[conn] = c.senders[conn]
+		delete(c.senders, conn)
 	}
-	c.Unlock()
-	c.garbageCollectSenders() // TODO merge into the above
+	// stop any senders for connections that are gone
+	for _, sender := range c.senders {
+		sender.Stop()
+	}
+	c.senders = retainedSenders
 }
 
 func (c *GossipChannel) SendGossipDown(conn Connection, data GossipData) {
@@ -213,23 +220,6 @@ func (c *GossipChannel) sendGossipDown(conn Connection, data GossipData) {
 	}
 	// our callers hold a lock on c; we lock sender
 	sender.Send(data)
-}
-
-// Copy senders corresponding to current connections, then close down
-// any remaining senders.
-func (c *GossipChannel) garbageCollectSenders() {
-	connections := c.ourself.Connections() // do this outside the lock so they don't nest
-	newSenders := make(senderMap)
-	c.Lock()
-	defer c.Unlock()
-	for _, conn := range connections {
-		newSenders[conn] = c.senders[conn]
-		delete(c.senders, conn)
-	}
-	for _, sender := range c.senders {
-		sender.Stop()
-	}
-	c.senders = newSenders
 }
 
 func (c *GossipChannel) gossipMsg(buf []byte) ProtocolMsg {
