@@ -53,20 +53,20 @@ type gossipUpdateSender struct {
 func (c *GossipChannel) makeSender(data GossipData, pSender ProtocolSender) *gossipUpdateSender {
 	sendChan := make(chan bool, 1)
 	sender := &gossipUpdateSender{pending: data.EmptySet(), data: data, sender: pSender, gossipChan: c, sendChan: sendChan}
-	go sender.sendingLoop(sendChan)
+	go sender.run(sendChan)
 	return sender
 }
 
-func (sender *gossipUpdateSender) sendingLoop(sendingChan <-chan bool) {
+func (sender *gossipUpdateSender) run(sendingChan <-chan bool) {
 	for {
 		if val := <-sendingChan; !val { // receive zero value when chan is closed
 			break
 		}
-		sender.sendAllPending()
+		sender.sendPending()
 	}
 }
 
-func (sender *gossipUpdateSender) sendAllPending() {
+func (sender *gossipUpdateSender) sendPending() {
 	sender.Lock()
 	pending := sender.pending
 	sender.pending = sender.data.EmptySet() // Clear out the map
