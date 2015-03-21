@@ -46,13 +46,13 @@ type gossipUpdateSender struct {
 	pending    GossipKeySet   // which data needs sent
 	data       GossipData     // so we can get the latest version of the data
 	sender     ProtocolSender // does the actual sending
-	gossipChan *GossipChannel // to tag the outgoing message
+	channel    *GossipChannel // to tag the outgoing message
 	sendChan   chan<- bool    // channel to sending goroutine
 }
 
 func (c *GossipChannel) makeSender(data GossipData, pSender ProtocolSender) *gossipUpdateSender {
 	sendChan := make(chan bool, 1)
-	sender := &gossipUpdateSender{pending: data.EmptySet(), data: data, sender: pSender, gossipChan: c, sendChan: sendChan}
+	sender := &gossipUpdateSender{pending: data.EmptySet(), data: data, sender: pSender, channel: c, sendChan: sendChan}
 	go sender.run(sendChan)
 	return sender
 }
@@ -72,7 +72,7 @@ func (sender *gossipUpdateSender) sendPending() {
 	sender.pending = sender.data.EmptySet() // Clear out the map
 	sender.Unlock()                         // don't hold the lock while calling Encode which may take other locks
 	buf := sender.data.Encode(pending)
-	sender.sender.SendProtocolMsg(sender.gossipChan.gossipMsg(buf))
+	sender.sender.SendProtocolMsg(sender.channel.gossipMsg(buf))
 }
 
 func (sender *gossipUpdateSender) send(updateSet GossipKeySet) {
