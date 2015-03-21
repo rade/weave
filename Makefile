@@ -28,7 +28,7 @@ update:
 
 $(WEAVER_EXE) $(WEAVEDNS_EXE): common/*.go
 	go get -tags netgo ./$(@D)
-	go build -ldflags "-extldflags \"-static\" -X main.version $(WEAVE_VERSION)" -tags netgo -o $@ ./$(shell dirname $@)
+	go build -ldflags "-extldflags \"-static\" -X main.version $(WEAVE_VERSION)" -tags netgo -installsuffix netgo -o $@ ./$(shell dirname $@)
 	@strings $@ | grep cgo_stub\\\.go >/dev/null || { \
 		rm $@; \
 		echo "\nYour go standard library was built without the 'netgo' build tag."; \
@@ -38,7 +38,7 @@ $(WEAVER_EXE) $(WEAVEDNS_EXE): common/*.go
 		false; \
 	}
 
-$(WEAVER_EXE): router/*.go weaver/main.go
+$(WEAVER_EXE): router/*.go ipam/*.go weaver/main.go
 $(WEAVEDNS_EXE): nameserver/*.go weavedns/main.go
 
 $(WEAVER_EXPORT): weaver/Dockerfile $(WEAVER_EXE)
@@ -61,6 +61,7 @@ $(DOCKER_DISTRIB):
 # Add more directories in here as more tests are created
 tests:
 	cd router; go test -cover -tags netgo
+	cd ipam; go test -cover -tags netgo
 	cd nameserver; go test -cover -tags netgo
 
 $(PUBLISH): publish_%:
