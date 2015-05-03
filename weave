@@ -28,6 +28,8 @@ usage() {
     echo "weave start      <cidr> [<cidr> ...] <container_id>"
     echo "weave attach     <cidr> [<cidr> ...] <container_id>"
     echo "weave detach     <cidr> [<cidr> ...] <container_id>"
+    echo "weave dns-add    <cidr> [<cidr> ...] <container_id> [-h <fqdn>]"
+    echo "weave dns-remove <cidr> [<cidr> ...] <container_id>"
     echo "weave expose     <cidr> [<cidr> ...] [-h <fqdn>]"
     echo "weave hide       <cidr> [<cidr> ...]"
     echo "weave ps         [<container_id> ...]"
@@ -535,21 +537,32 @@ dns_args() {
     DNS_ARGS="$DNS_ARG $DNS_SEARCH_ARG"
 }
 
-# Perform operation $1 on local DNS database, for container ID $2 at
-# addresses $3, $4, ...  This function is only called when we know $2
-# is a valid container name
+# Perform operation $1 on local DNS database, for container ID $2
+# with an FQDN obtained from the container's configured hostname and
+# domain, at addresses $3, $4 ...
 tell_dns() {
     METHOD="$1"
     CONTAINER_ID="$2"
     shift 2
+    CONTAINER_FQDN=$(docker inspect --format='{{.Config.Hostname}}.{{.Config.Domainname}}.' $CONTAINER_ID 2>/dev/null) && true
+    tell_dns_fqdn $METHOD $CONTAINER_ID $CONTAINER_FQDN $@
+}
 
+# Perform operation $1 on local DNS database, for container ID $2
+# with FQDN $3, at addresses $4, $5 ... This function is only called
+# where we know $2 is a valid container name
+tell_dns_fqdn() {
+    METHOD="$1"
+    CONTAINER_ID="$2"
+    CONTAINER_FQDN="$3"
+    shift 3
     if ! status=$(docker inspect --format='{{.State.Running}}' $DNS_CONTAINER_NAME 2>/dev/null) || [ "$status" != "true" ] ; then
         # weavedns not running - silently return
         return
     fi
     # get the long form of the container ID
     CONTAINER=$(docker inspect --format='{{.Id}}' $CONTAINER_ID 2>/dev/null)
-    MORE_ARGS=$(docker inspect --format='--data-urlencode fqdn={{.Config.Hostname}}.{{.Config.Domainname}}.' $CONTAINER 2>/dev/null) && true
+    MORE_ARGS="--data-urlencode fqdn=$CONTAINER_FQDN"
     for ADDR; do
         http_call $DNS_CONTAINER_NAME $DNS_HTTP_PORT $METHOD /name/$CONTAINER/${ADDR%/*} $MORE_ARGS || true
     done
@@ -562,13 +575,8 @@ populate_dns() {
         return 0
     fi
     for CONTAINER in $(docker ps -q --no-trunc); do
-        MORE_ARGS=$(docker inspect --format='--data-urlencode fqdn={{.Config.Hostname}}.{{.Config.Domainname}}.' $CONTAINER 2>/dev/null) && true
         if CONTAINER_IPS=$(with_container_netns $CONTAINER container_weave_addrs 2>&1 | sed -n -e 's/inet \([^/]*\)\/\(.*\)/\1/p') ; then
-            for IP in $CONTAINER_IPS; do
-                # NB: CONTAINER_IP is the IP of the weavedns
-                # container; it is set by wait_for_status.
-                http_call_ip $CONTAINER_IP $DNS_HTTP_PORT PUT /name/$CONTAINER/$IP $MORE_ARGS
-            done
+            tell_dns PUT $CONTAINER $CONTAINER_IPS
         fi
     done
 }
@@ -800,6 +808,26 @@ case "$COMMAND" in
         [ $# -eq 1 ] || usage
         CONTAINER_ID="$1"
         with_container_netns $CONTAINER_ID detach $CIDR_ARGS >/dev/null
+        tell_dns DELETE $CONTAINER_ID $CIDR_ARGS
+        ;;
+    dns-add)
+        collect_cidr_args "$@"
+        shift $CIDR_COUNT
+        [ $# -ge 1 ] || usage
+        CONTAINER_ID="$1"
+        if [ $# -eq 1 ]; then
+            tell_dns PUT $CONTAINER_ID $CIDR_ARGS
+        else
+            [ $# -eq 3 -a "$2" = "-h" ] || usage
+            FQDN="$3"
+            tell_dns_fqdn PUT $CONTAINER_ID $FQDN $CIDR_ARGS
+        fi
+        ;;
+    dns-remove)
+        collect_cidr_args "$@"
+        shift $CIDR_COUNT
+        [ $# -eq 1 ] || usage
+        CONTAINER_ID="$1"
         tell_dns DELETE $CONTAINER_ID $CIDR_ARGS
         ;;
     expose)
