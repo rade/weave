@@ -88,8 +88,8 @@ func TestServerCacheRefresh(t *testing.T) {
 	assertNotLocalInCache(t, cache, qName2, "after asking for a unknown name")
 
 	// delete the IPs, and some time passes by so the cache should be purged...
-	dbs[1].Zone.DeleteRecord(containerID, net.ParseIP("10.2.2.1"))
-	dbs[1].Zone.DeleteRecord(containerID, net.ParseIP("10.2.2.2"))
+	dbs[1].Zone.DeleteRecords(containerID, "", net.ParseIP("10.2.2.1"))
+	dbs[1].Zone.DeleteRecords(containerID, "", net.ParseIP("10.2.2.2"))
 	clk.Forward(refreshInterval + 1)
 
 	qName1, _ = assertExchange(t, testName1, dns.TypeA, testPort, 0, 0, dns.RcodeNameError)
