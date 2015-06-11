@@ -27,16 +27,16 @@ hosts.
 WeaveDNS is deployed as a set of containers that communicate with each
 other over the weave network. One such container needs to be started
 on every weave host, by invoking the weave script command
-`launch-dns`. Application containers are then instructed to use
-weaveDNS as their nameserver by supplying the `--with-dns` option when
-starting them; containers so started also automatically register their
-container name in the weaveDNS domain. For example:
+`launch-dns`. Application containers are automatically configured to
+use weaveDNS as their nameserver if they are started whilst weaveDNS
+is running; such containers also register their container name in the
+weaveDNS domain. For example:
 
 ```bash
 $ weave launch
 $ weave launch-dns 10.2.254.1/24
-$ weave run --with-dns 10.2.1.25/24 -ti --name=pingme ubuntu
-$ shell1=$(weave run --with-dns 10.2.1.26/24 -ti --name=ubuntu ubuntu)
+$ weave run 10.2.1.25/24 -ti --name=pingme ubuntu
+$ shell1=$(weave run 10.2.1.26/24 -ti --name=ubuntu ubuntu)
 $ docker attach $shell1
 
 root@ubuntu:/# ping pingme
@@ -51,6 +51,11 @@ it in weaveDNS simply by giving the container a hostname in the
 $ weave run 10.2.1.25/24 -ti -h pingme.weave.local ubuntu
 ```
 
+It is also possible to force or forbid an application container's use
+of weaveDNS with the `--with-dns` and `--without-dns` options to
+`weave run`; these override the runtime detection of the weaveDNS
+container.
+
 Each weaveDNS container started with `launch-dns` needs to be given
 its own, unique, IP address, in a subnet that is common to all
 weaveDNS containers and not in use on any of the hosts.
@@ -62,7 +67,7 @@ use weaveDNS on a second host we would run:
 ```bash
 host2$ weave launch $HOST1
 host2$ weave launch-dns 10.2.254.2/24
-host2$ shell2=$(weave run --with-dns 10.2.1.36/24 -ti --name=ubuntu2 ubuntu)
+host2$ shell2=$(weave run 10.2.1.36/24 -ti --name=ubuntu2 ubuntu)
 host2$ docker attach $shell2
 
 root@ubuntu2:/# ping pingme
@@ -117,7 +122,7 @@ Returning to our earlier example, let us start an additional `pingme`
 container, this time on the 2nd host, and then run some ping tests...
 
 ```bash
-host2$ weave run --with-dns 10.2.1.35/24 -ti --name=pingme ubuntu
+host2$ weave run 10.2.1.35/24 -ti --name=pingme ubuntu
 host2$ docker attach $shell2
 
 root@ubuntu2:/# ping -nq -c 1 pingme
