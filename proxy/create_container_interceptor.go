@@ -81,7 +81,12 @@ func (i *createContainerInterceptor) setWeaveWaitEntrypoint(container *docker.Co
 }
 
 func (i *createContainerInterceptor) setWeaveDNS(container *createContainerRequestBody, r *http.Request) error {
-	if !i.proxy.WithDNS {
+	if i.proxy.WithoutDNS {
+		return nil
+	}
+
+	dnsDomain, dnsRunning := i.getDNSDomain()
+	if !(dnsRunning || i.proxy.WithDNS) {
 		return nil
 	}
 
@@ -94,13 +99,13 @@ func (i *createContainerInterceptor) setWeaveDNS(container *createContainerReque
 	name := r.URL.Query().Get("name")
 	if container.Hostname == "" && name != "" {
 		container.Hostname = name
-		container.Domainname = i.getDNSDomain()
+		container.Domainname = dnsDomain
 	}
 
 	return nil
 }
 
-func (i *createContainerInterceptor) getDNSDomain() (domain string) {
+func (i *createContainerInterceptor) getDNSDomain() (domain string, running bool) {
 	domain = nameserver.DefaultLocalDomain
 	dnsContainer, err := i.proxy.client.InspectContainer("weavedns")
 	if err != nil ||
@@ -121,7 +126,7 @@ func (i *createContainerInterceptor) getDNSDomain() (domain string) {
 		return
 	}
 
-	return string(b)
+	return string(b), true
 }
 
 func (i *createContainerInterceptor) InterceptResponse(r *http.Response) error {
