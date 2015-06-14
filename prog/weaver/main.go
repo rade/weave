@@ -24,40 +24,28 @@ import (
 
 var version = "(unreleased version)"
 
-func main() {
+var (
+	config       weave.Config
+	justVersion  bool
+	ifaceName    string
+	routerName   string
+	nickName     string
+	password     string
+	wait         int
+	debug        bool
+	pktdebug     bool
+	prof         string
+	bufSzMB      int
+	noDiscovery  bool
+	httpAddr     string
+	iprangeCIDR  string
+	ipsubnetCIDR string
+	peerCount    int
+	apiPath      string
+	peers        []string
+)
 
-	log.SetPrefix(weave.Protocol + " ")
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-
-	procs := runtime.NumCPU()
-	// packet sniffing can block an OS thread, so we need one thread
-	// for that plus at least one more.
-	if procs < 2 {
-		procs = 2
-	}
-	runtime.GOMAXPROCS(procs)
-
-	var (
-		config       weave.Config
-		justVersion  bool
-		ifaceName    string
-		routerName   string
-		nickName     string
-		password     string
-		wait         int
-		debug        bool
-		pktdebug     bool
-		prof         string
-		bufSzMB      int
-		noDiscovery  bool
-		httpAddr     string
-		iprangeCIDR  string
-		ipsubnetCIDR string
-		peerCount    int
-		apiPath      string
-		peers        []string
-	)
-
+func init() {
 	flag.BoolVar(&justVersion, "version", false, "print version and exit")
 	flag.IntVar(&config.Port, "port", weave.Port, "router port")
 	flag.StringVar(&ifaceName, "iface", "", "name of interface to capture/inject from (disabled if blank)")
@@ -76,7 +64,24 @@ func main() {
 	flag.StringVar(&ipsubnetCIDR, "ipsubnet", "", "subnet to allocate within by default, in CIDR notation")
 	flag.IntVar(&peerCount, "initpeercount", 0, "number of peers in network (for IP address allocation)")
 	flag.StringVar(&apiPath, "api", "unix:///var/run/docker.sock", "Path to Docker API socket")
-	flag.Parse()
+}
+
+func main() {
+
+	log.SetPrefix(weave.Protocol + " ")
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+
+	procs := runtime.NumCPU()
+	// packet sniffing can block an OS thread, so we need one thread
+	// for that plus at least one more.
+	if procs < 2 {
+		procs = 2
+	}
+	runtime.GOMAXPROCS(procs)
+
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 	peers = flag.Args()
 
 	InitDefaultLogging(debug)
