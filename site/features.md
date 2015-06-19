@@ -93,10 +93,10 @@ Similarly, in the container on $HOST2...
 
 The IP addresses and netmasks can be anything you like, but make sure
 they don't conflict with any IP ranges in use on the hosts (including
-those delegated to IPAM) or IP addresses of external services the
-hosts or containers need to connect to. The same IP range must be used
-everywhere, and the individual IP addresses must, of course, be
-unique.
+those delegated to weave's [automatic IP address allocator](#ipam)) or
+IP addresses of external services the hosts or containers need to
+connect to. The same IP range must be used everywhere, and the
+individual IP addresses must, of course, be unique.
 
 ### <a name="application-isolation"></a>Application isolation
 
