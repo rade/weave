@@ -239,53 +239,6 @@ The local domain should end with `local.`, since these names are
 link-local as per [RFC6762](https://tools.ietf.org/html/rfc6762),
 (though this is not strictly necessary).
 
-## <a name="without-run"></a>Using weaveDNS without `weave run`
-
-When weaveDNS is running, both `weave run` and `weave attach` register
-the hostname of the given container against the given weave network IP
-address. And if you use the `--with-dns` option, `weave run`
-automatically supplies the DNS server address to the new container.
-
-In some circumstances, you may not want to use the `weave run` command
-to start containers. You can still take advantage of a running
-weaveDNS, with some extra manual steps.
-
-### Supplying the DNS server
-
-If you want to start containers with `docker run` rather than `weave
-run`, you can supply the docker bridge IP as the `--dns` option to
-make it use weaveDNS:
-
-```bash
-$ docker_ip=$(docker inspect --format='{{ .NetworkSettings.Gateway }}' weavedns)
-$ shell2=$(docker run --dns=$docker_ip -ti ubuntu)
-$ weave attach 10.2.1.27/24 $shell2
-```
-
-This isn't very useful unless the container is also attached to the
-weave network (as in the last line above).
-
-Also note that this means of finding the Docker bridge's IP address
-requires a running container (any one would do); another way to find
-it is:
-
-```bash
-$ docker_ip=$(ip -4 addr show dev docker0 | grep -o 'inet [0-9.]*' | cut -d ' ' -f 2)
-```
-
-### Supplying the domain search path
-
-By default, Docker provides containers with a `/etc/resolv.conf` that
-matches that for the host. In some circumstances, this may include a
-DNS search path, which will break the nice "bare names resolve"
-property above.
-
-Therefore, when starting containers with `docker run` instead of
-`weave run`, you will usually want to supply a domain search path so
-that you can use unqualified hostnames. Use `--dns-search=.` to make
-the resolver use the container's domain, or e.g.,
-`--dns-search=weave.local` to make it look in `weave.local`.
-
 ## <a name="troubleshooting"></a>Troubleshooting
 
 The command
