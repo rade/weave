@@ -91,12 +91,6 @@ Multiple IP addresses and networks can be supplied in the `WEAVE_CIDR`
 variable by space-separating them, as in
 `WEAVE_CIDR="10.2.1.1/24 10.2.2.1/24"`.
 
-Using the proxy brings some additional benefits over `weave run`. The
-proxy ensures that the weave network interface is available before
-starting a container's application process. Furthermore, containers
-can be started in foreground mode, and can be automatically removed
-(with the ususal `--rm`).
-
 ## <a name="ipam"></a>Automatic IP address assignment
 
 If [automatic IP address assignment](ipam.html) is enabled in weave,
@@ -234,13 +228,15 @@ specify addresses manually instead:
 
     $ weave run 10.2.1.1/24 -ti ubuntu
 
-Unlike launching via the proxy `weave run` starts containers in the
-background so that it may perform the network attachment step
-afterwards; consequently there may be a small window during which the
-container is running but has no weave interface.
+Bear in mind that the proxy brings additional benefits which are not
+available with `weave run` - for example, it ensures that the weave
+network interface is available before starting a container's
+application process. Furthermore, containers can be started in
+foreground mode, and can be automatically removed (with the usual
+`--rm`).
 
-Finally, there is a `weave start` command, which invokes `docker
-start` for starting existing containers.
+Finally, there is a `weave start` command which starts existing
+containers with `docker start` and attaches them to the weave network.
 
 ## <a name="troubleshooting"></a>Troubleshooting
 
