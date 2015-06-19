@@ -125,7 +125,7 @@ container with a blank `WEAVE_CIDR`, e.g.
 
 Containers launched via the proxy will use [weaveDNS](weavedns.html)
 automatically if it is running at the point when they are started -
-see the [usage](weavedns.html#usage) section for an in-depth
+see the [weaveDNS usage](weavedns.html#usage) section for an in-depth
 explanation of the behaviour and how to control it.
 
 ## <a name="tls"></a>Securing the docker communication with TLS
