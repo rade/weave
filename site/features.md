@@ -155,6 +155,10 @@ started:
 
     host1$ docker run -e WEAVE_CIDR="net:default net:10.2.2.0/24" -ti ubuntu
 
+`net:default` is used here to request allocation of an address from
+the default subnet in addition to one from an explicitly specified
+range.
+
 NB: By default docker permits communication between containers on the
 same host, via their docker-assigned IP addresses. For complete
 isolation between application containers, that feature needs to be
