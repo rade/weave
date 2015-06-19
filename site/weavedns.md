@@ -59,8 +59,8 @@ still use weaveDNS for resolution.
 
 It is also possible to force or forbid an application container's use
 of weaveDNS with the `--with-dns` and `--without-dns` options to
-`weave run`; these override the runtime detection of the weaveDNS
-container.
+`weave run` and `weave launch-proxy`; these override the runtime
+detection of the weaveDNS container.
 
 Each weaveDNS container started with `launch-dns` needs its own unique
 IP address in a subnet that is common to all weaveDNS containers. In
