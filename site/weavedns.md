@@ -125,10 +125,10 @@ root@ubuntu:/# ping -nq -c 1 pingme
 PING pingme.weave.local (10.128.0.2) 56(84) bytes of data.
 ...
 root@ubuntu:/# ping -nq -c 1 pingme
-PING pingme.weave.local (10.160.0.2) 56(84) bytes of data.
+PING pingme.weave.local (10.160.0.1) 56(84) bytes of data.
 ...
 root@ubuntu:/# ping -nq -c 1 pingme
-PING pingme.weave.local (10.160.0.2) 56(84) bytes of data.
+PING pingme.weave.local (10.160.0.1) 56(84) bytes of data.
 ...
 root@ubuntu:/# ping -nq -c 1 pingme
 PING pingme.weave.local (10.128.0.2) 56(84) bytes of data.
@@ -152,8 +152,8 @@ If you want to give the container a name in DNS *other* than its
 hostname, you can register it using the `dns-add` command. For example:
 
 ```bash
-$ shell2=(weave run 10.2.1.27/24 -ti ubuntu)
-$ weave dns-add 10.2.1.28 $shell2 -h pingme2.weave.local
+$ C=$(docker run -e WEAVE_CIDR=10.2.1.27/24 -ti ubuntu)
+$ weave dns-add 10.2.1.27 $C -h pingme2.weave.local
 ```
 
 You can also use `dns-add` to add the container's configured hostname
@@ -184,7 +184,7 @@ containers that die. You can tell it not to, by adding `--watch=false`
 to the container args:
 
 ```bash
-$ weave launch-dns 10.2.254.1/24 --watch=false
+$ weave launch-dns --watch=false
 ```
 
 ## <a name="ttl"></a>Configuring a custom TTL
@@ -197,7 +197,7 @@ However, you can force a different TTL value by launching weaveDNS with
 the `--ttl` argument:
 
 ```bash
-$ weave launch-dns 10.2.254.1/24 --ttl=10
+$ weave launch-dns --ttl=10
 ```
 
 This will shorten the lifespan of answers sent to other peers,
@@ -236,7 +236,7 @@ can force weaveDNS to use a different domain by launching it
 with the `--domain` argument. For example,
 
 ```bash
-$ weave launch-dns 10.2.254.1/24 --domain="mycompany.local."
+$ weave launch-dns --domain="mycompany.local."
 ```
 
 The local domain should end with `local.`, since these names are
@@ -300,19 +300,20 @@ reports on the current status of various weave components, including
 DNS:
 
 ````
-weave router git-8f675f15c0b5
 ...
 
-weave DNS git-8f675f15c0b5
-Local domain weave.local.
+weave DNS 1.0.0
 Listen address :53
-mDNS interface &{26 65535 ethwe fa:b6:b1:85:ac:9b up|broadcast|multicast}
-Fallback DNS config &{[66.28.0.45 8.8.8.8] [] 53 1 5 2}
+Fallback DNS config &{[10.0.2.3] [] 53 1 5 2}
+
+Local domain weave.local.
+Interface &{74 65535 ethwe 82:0c:92:84:0e:88 up|broadcast|multicast}
 Zone database:
-710978857a88 10.2.1.26 wiff.weave.local.
-e8d85b1dcdb1 10.2.1.27 waff.weave.local.
-26bd05f9a0cb 10.2.1.28 ping.weave.local.
-1ab0e8b17c39 10.2.1.29 pong.weave.local.
+144b75a9b873: pingme.weave.local.[10.160.0.1]/OBS:1
+74a5510a91ad: ubuntu.weave.local.[10.160.0.2]
+weave:remote: pingme.weave.local.[10.128.0.2]/TTL:30
+
+...
 ````
 
 The first section covers the router; see the [troubleshooting
