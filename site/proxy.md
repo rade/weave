@@ -123,18 +123,10 @@ container with a blank `WEAVE_CIDR`, e.g.
 
 ## <a name="dns"></a>Automatic discovery
 
-Containers started via the proxy are automatically registered in
-[weaveDNS](weavedns.html) if they have a hostname in the weaveDNS
-domain (usually `.weave.local`). In order for containers to be able to
-look up such names, their DNS resolver needs to be configured to point
-at weaveDNS. This will be done automatically by the proxy while
-weaveDNS is running. To override this behaviour launch the proxy with
-either `--with-dns` or `--without-dns`, which will force the proxy to
-always/never set the resolver to weaveDNS. If there is no hostname
-provided, the container will be registered in weaveDNS using its
-container name. Otherwise, if there is no container name, and no
-hostname (or a hostname outside the weaveDNS domain), the container
-will not be registered in weaveDNS.
+Containers launched via the proxy will use [weaveDNS](weavedns.html)
+automatically if it is running at the point when they are started -
+see the [usage](weavedns.html#usage) section for an in-depth
+explanation of the behaviour and how to control it.
 
 ## <a name="tls"></a>Securing the docker communication with TLS
 
