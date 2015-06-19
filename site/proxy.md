@@ -189,12 +189,14 @@ specify addresses manually instead:
 
     $ weave run 10.2.1.1/24 -ti ubuntu
 
-Bear in mind that the proxy brings additional benefits which are not
-available with `weave run` - for example, it ensures that the weave
-network interface is available before starting a container's
-application process. Furthermore, containers can be started in
-foreground mode, and can be automatically removed (with the usual
-`--rm`).
+There are some limitations to starting containers with weave run:
+
+* containers are always started in the background, i.e. the equivalent
+  of always supplying the -d option to docker run
+* the --rm option to docker run, for automatically removing containers
+  after they stop, is not available
+* the weave network interface may not be available immediately on
+  container startup.
 
 Finally, there is a `weave start` command which starts existing
 containers with `docker start` and attaches them to the weave network.
