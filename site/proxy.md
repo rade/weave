@@ -16,7 +16,6 @@ instead of `weave run`.
  * [Usage](#usage)
  * [Automatic IP address assignment](#ipam)
  * [Automatic discovery](#dns)
- * [Multi-host example](#multi-host)
  * [Securing the docker communication with TLS](#tls)
  * [Launching containers without the proxy](#without-proxy)
  * [Troubleshooting](#troubleshooting)
@@ -136,36 +135,6 @@ provided, the container will be registered in weaveDNS using its
 container name. Otherwise, if there is no container name, and no
 hostname (or a hostname outside the weaveDNS domain), the container
 will not be registered in weaveDNS.
-
-## <a name="multi-host"></a>Multi-host example
-
-Here's a complete example of using weave proxies configured with
-[automatic IP address assignment](#ipam) and
-[automatic discovery](#dns) to start containers on two hosts such that
-one can reach the other by name.
-
-First, let us start weave, weaveDNS and the proxy, and set DOCKER_HOST
-to point at the latter:
-
-    host1$ weave launch
-    host1$ weave launch-dns
-    host1$ weave launch-proxy
-    host1$ eval "$(weave proxy-env)"
-
-    host2$ weave launch host1
-    host2$ weave launch-dns
-    host2$ weave launch-proxy
-    host2$ eval "$(weave proxy-env)"
-
-Now let us start a named container on one host, and ping it, by name,
-from a container on the other host.
-
-    host1$ docker run --name=pingme -dti ubuntu
-
-    host2$ docker run -ti ubuntu ping pingme
-    PING pingme.weave.local (10.128.0.2) 56(84) bytes of data.
-    64 bytes from pingme.weave.local (10.128.0.2): icmp_seq=1 ttl=64 time=0.047 ms
-    ...
 
 ## <a name="tls"></a>Securing the docker communication with TLS
 
