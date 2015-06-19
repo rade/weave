@@ -18,6 +18,7 @@ instead of `weave run`.
  * [Automatic discovery](#dns)
  * [Multi-host example](#multi-host)
  * [Securing the docker communication with TLS](#tls)
+ * [Launching containers without the proxy](#without-proxy)
  * [Troubleshooting](#troubleshooting)
 
 ## <a name="setup"></a>Setup
@@ -217,6 +218,21 @@ with
 which is exactly the same configuration as when connecting to the
 docker daemon directly, except that the specified port is the weave
 proxy port.
+
+## <a name="without-proxy"></a>Launching containers without the proxy
+
+If you cannot or do not want to use the proxy you can launch
+containers on the weave network with `weave run`:
+
+    $ weave run -ti ubuntu
+
+The arguments after `run` are passed through to `docker run` so you
+can freely specify whichever docker options are appropriate. Once the
+container is started `weave run` attaches it to the weave network, in
+this example with an address allocated by IPAM. If you wish you can
+specify addresses manually instead:
+
+    $ weave run 10.2.1.1/24 -ti ubuntu
 
 ## <a name="troubleshooting"></a>Troubleshooting
 
