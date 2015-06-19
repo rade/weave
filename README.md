@@ -56,10 +56,10 @@ First start weave on $HOST1:
 
     host1$ weave launch && weave launch-dns && weave launch-proxy
 
-this pulls and runs the router, DNS and proxy containers. Next we
-configure our `DOCKER_HOST` environment variable to point to the
-proxy, so that containers launched via the docker command line are
-automatically attached to the weave network:
+this runs the weave router, DNS and proxy, each in their own
+container. Next we configure our `DOCKER_HOST` environment variable to
+point to the proxy, so that containers launched via the docker command
+line are automatically attached to the weave network:
 
     host1$ eval $(weave proxy-env)
 
@@ -92,10 +92,16 @@ available. Also, we can tell weave to connect to multiple peers by
 supplying multiple addresses, separated by spaces. And we can
 [add peers dynamically](http://docs.weave.works/weave/latest_release/features.html#dynamic-topologies).
 
+The router, DNS and proxy need to be started once per host. The
+relevant container images are pulled down on demand, but if you wish
+you can preload them by running `weave setup` - this is particularly
+useful for automated deployments, and ensures that there are no delays
+during later operations.
+
 Now that we've got everything set up, let's see whether our containers
 can talk to each other...
 
-On `$HOST1`...
+In the container started on `$HOST1`...
 
     root@a1:/# ping -c 1 -q a2
     PING a2.weave.local (10.160.0.2) 56(84) bytes of data.
@@ -103,7 +109,7 @@ On `$HOST1`...
     1 packets transmitted, 1 received, 0% packet loss, time 0ms
     rtt min/avg/max/mdev = 0.341/0.341/0.341/0.000 ms
 
-Similarly, on `$HOST2`...
+Similarly, in the container started on `$HOST2`...
 
     root@a2:/# ping -c 1 -q a1
     PING a1.weave.local (10.128.0.2) 56(84) bytes of data.
@@ -117,8 +123,11 @@ to each other.
 ## Find out more
 
  * [Documentation homepage](http://docs.weave.works/weave/latest_release/)
+ * [Getting Started Guides](http://weave.works/guides/)
  * [Features](http://docs.weave.works/weave/latest_release/features.html)
+ * [Automatic IP Address Management](http://docs.weave.works/weave/latest_release/ipam.html)
  * [Automatic Discovery with WeaveDNS](http://docs.weave.works/weave/latest_release/weavedns.html)
+ * [Configuring the interaction with Docker](http://docs.weave.works/weave/latest_release/proxy.html)
  * [Troubleshooting](http://docs.weave.works/weave/latest_release/troubleshooting.html)
  * [Building](http://docs.weave.works/weave/latest_release/building.html)
  * [How it works](http://docs.weave.works/weave/latest_release/how-it-works.html)

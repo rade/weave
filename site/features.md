@@ -93,10 +93,10 @@ Similarly, in the container on $HOST2...
 
 The IP addresses and netmasks can be anything you like, but make sure
 they don't conflict with any IP ranges in use on the hosts (including
-those delegated to IPAM) or IP addresses of external services the
-hosts or containers need to connect to. The same IP range must be used
-everywhere, and the individual IP addresses must, of course, be
-unique.
+those delegated to weave's [automatic IP address allocator](#ipam)) or
+IP addresses of external services the hosts or containers need to
+connect to. The same IP range must be used everywhere, and the
+individual IP addresses must, of course, be unique.
 
 ### <a name="application-isolation"></a>Application isolation
 
@@ -155,6 +155,10 @@ started:
 
     host1$ docker run -e WEAVE_CIDR="net:default net:10.2.2.0/24" -ti ubuntu
 
+`net:default` is used here to request allocation of an address from
+the default subnet in addition to one from an explicitly specified
+range.
+
 NB: By default docker permits communication between containers on the
 same host, via their docker-assigned IP addresses. For complete
 isolation between application containers, that feature needs to be
@@ -166,13 +170,10 @@ be accomplished by starting them with the `--cap-drop net_raw` option.
 
 ### <a name="dynamic-network-attachment"></a>Dynamic network attachment
 
-In some scenarios containers are started independently, e.g. via some
-existing tool chain, or require more complex startup sequences than
-provided by `weave run`. And sometimes the decision which application
-network a container should be part of is made post-startup. For these
-situations, weave allows an existing, running container to be attached
-to the weave network. To illustrate, we can achieve the same effect as
-the first example with
+Sometimes the application network to which a container should be
+attached is not known in advance. For these situations, weave allows
+an existing, running container to be attached to the weave network. To
+illustrate, we can achieve the same effect as the first example with
 
     host1$ C=$(docker run -e WEAVE_CIDR=none -dti ubuntu)
     host1$ weave attach $C
