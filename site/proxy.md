@@ -234,6 +234,14 @@ specify addresses manually instead:
 
     $ weave run 10.2.1.1/24 -ti ubuntu
 
+Unlike launching via the proxy `weave run` starts containers in the
+background so that it may perform the network attachment step
+afterwards; consequently there may be a small window during which the
+container is running but has no weave interface.
+
+Finally, there is a `weave start` command, which invokes `docker
+start` for starting existing containers.
+
 ## <a name="troubleshooting"></a>Troubleshooting
 
 The command
