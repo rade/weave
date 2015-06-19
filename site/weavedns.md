@@ -33,9 +33,7 @@ on every weave host, by invoking the weave script command
 `launch-dns`:
 
 ```bash
-host1$ weave launch
-host1$ weave launch-dns
-host1$ weave launch-proxy
+host1$ weave launch && weave launch-dns && weave launch-proxy
 host1$ eval $(weave proxy-env)
 ```
 
@@ -115,9 +113,7 @@ Returning to our earlier example, let us start an additional `pingme`
 container, this time on the 2nd host, and then run some ping tests...
 
 ```bash
-host2$ weave launch
-host2$ weave launch-dns
-host2$ weave launch-proxy
+host2$ weave launch && weave launch-dns && weave launch-proxy
 host2$ eval $(weave proxy-env)
 host2$ docker run -dti --name=pingme ubuntu
 
@@ -162,7 +158,7 @@ and domain, simply by omitting `-h <fqdn>`.
 The inverse operation can be carried out using the `dns-remove` command:
 
 ```bash
-$ weave dns-remove 10.2.1.27 $shell2
+$ weave dns-remove 10.2.1.27 $C
 ```
 
 When queried about a name with multiple IPs, weaveDNS returns a random
