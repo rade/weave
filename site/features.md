@@ -166,13 +166,10 @@ be accomplished by starting them with the `--cap-drop net_raw` option.
 
 ### <a name="dynamic-network-attachment"></a>Dynamic network attachment
 
-In some scenarios containers are started independently, e.g. via some
-existing tool chain, or require more complex startup sequences than
-provided by `weave run`. And sometimes the decision which application
-network a container should be part of is made post-startup. For these
-situations, weave allows an existing, running container to be attached
-to the weave network. To illustrate, we can achieve the same effect as
-the first example with
+Sometimes the application network to which a container should be
+attached is not known in advance. For these situations, weave allows
+an existing, running container to be attached to the weave network. To
+illustrate, we can achieve the same effect as the first example with
 
     host1$ C=$(docker run -e WEAVE_CIDR=none -dti ubuntu)
     host1$ weave attach $C
